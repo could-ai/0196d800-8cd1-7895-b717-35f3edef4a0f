@@ -1,0 +1,56 @@
+# Disable Fastlane's usage data collection
+opt_out_usage
+opt_out_crash_reporting
+
+default_platform(:android)
+
+platform :android do
+  desc "Deploy to Google Play"
+  lane :publish_to_play_store do
+    puts "Using package name: app.couldai.mmm"
+    
+    begin
+      # 尝试使用completed状态发布应用
+      upload_to_play_store(
+        package_name: 'app.couldai.mmm',
+        track: 'alpha',
+        aab: '../build/app/outputs/bundle/release/app-release.aab',
+        json_key_data: ENV["GOOGLE_PLAY_SERVICE_ACCOUNT_JSON"],
+        skip_upload_metadata: true,
+        skip_upload_images: true,
+        skip_upload_screenshots: true,
+        release_status: 'completed'
+      )
+    rescue => e
+      # 捕获错误信息
+      error_message = e.to_s
+      puts "First upload attempt failed: #{error_message}"
+      
+      # 如果是draft错误，尝试使用draft状态重新发布
+      if error_message.include?("Only releases with status draft may be created on draft app")
+        puts "Detected draft app, retrying with draft release status..."
+        begin
+          # 再次尝试，使用draft状态
+          upload_to_play_store(
+            package_name: 'app.couldai.mmm',
+            track: 'alpha',
+            aab: '../build/app/outputs/bundle/release/app-release.aab',
+            json_key_data: ENV["GOOGLE_PLAY_SERVICE_ACCOUNT_JSON"],
+            skip_upload_metadata: true,
+            skip_upload_images: true,
+            skip_upload_screenshots: true,
+            release_status: 'draft'
+          )
+        rescue => retry_error
+          # 如果再次失败，记录错误并抛出
+          puts "Draft upload also failed: #{retry_error}"
+          raise retry_error
+        end
+      else
+        # 如果是其他错误，记录并抛出原始错误
+        puts "Failed with non-draft error, marking step as failed"
+        raise e
+      end
+    end
+  end
+end
